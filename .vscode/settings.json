@@ -1,5 +1,6 @@
 {
     "files.associations": {
-        "cerrno": "c"
+        "cerrno": "c",
+        "thread": "c"
     }
 }

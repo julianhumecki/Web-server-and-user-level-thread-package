@@ -1,0 +1,7 @@
+./run-cache-experiment: line 27: ./fileset: No such file or directory
+Sat 28 Aug 2021 07:19:54 PM EDT
+Running cachesize experiment. Output goes to plot-cachesize.out
+./run-one-experiment: line 28: ./server: No such file or directory
+./run-one-experiment: line 50: ./client: No such file or directory
+error: run 1: ./client -t 127.0.0.1 35230 100 10 fileset_dir.idx
+forcing server shutdown

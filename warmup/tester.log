@@ -11,5 +11,37 @@ Huh?
 OK
 OK
 OK
+rm: cannot remove './tester/scripts/lab3-05-lock.py': Permission denied
+rm: cannot remove './tester/scripts/lab5-01-webserver.py': Permission denied
+rm: cannot remove './tester/scripts/lab4-01-webserver.py': Permission denied
+rm: cannot remove './tester/scripts/.gitignore': Permission denied
+rm: cannot remove './tester/scripts/lab3-01-preemptive.py': Permission denied
+rm: cannot remove './tester/scripts/lab3-07-cv-broadcast.py': Permission denied
+rm: cannot remove './tester/scripts/lab3-06-cv-signal.py': Permission denied
+rm: cannot remove './tester/scripts/tester.pyc': Permission denied
+rm: cannot remove './tester/scripts/lab3-02-wakeup.py': Permission denied
+rm: cannot remove './tester/scripts/lab1-01-warmup.py': Permission denied
+rm: cannot remove './tester/scripts/tester.py': Permission denied
+rm: cannot remove './tester/scripts/readonlydir': Permission denied
+mkdir: cannot create directory ‘./tester’: File exists
 OK
-diff: ./tester: No such file or directory
+rm: cannot remove './tester/scripts/lab3-05-lock.py': Permission denied
+rm: cannot remove './tester/scripts/lab5-01-webserver.py': Permission denied
+rm: cannot remove './tester/scripts/lab4-01-webserver.py': Permission denied
+rm: cannot remove './tester/scripts/.gitignore': Permission denied
+rm: cannot remove './tester/scripts/lab3-01-preemptive.py': Permission denied
+rm: cannot remove './tester/scripts/lab3-07-cv-broadcast.py': Permission denied
+rm: cannot remove './tester/scripts/lab3-06-cv-signal.py': Permission denied
+rm: cannot remove './tester/scripts/tester.pyc': Permission denied
+rm: cannot remove './tester/scripts/lab3-02-wakeup.py': Permission denied
+rm: cannot remove './tester/scripts/lab1-01-warmup.py': Permission denied
+rm: cannot remove './tester/scripts/tester.py': Permission denied
+rm: cannot remove './tester/scripts/readonlydir': Permission denied
+./test_cpr: line 20:  9418 Aborted                 ./cpr $SRC $DST > /dev/null 2>&1
+Only in /cad2/ece344f/tester: bin
+Only in /cad2/ece344f/tester/scripts: lab2-02-basic.py
+Only in /cad2/ece344f/tester/scripts: lab3-03-wakeupall.py
+Only in /cad2/ece344f/tester/scripts: lab3-04-wait.py
+Only in /cad2/ece344f/tester/scripts: lab6-01-testfs.py
+Only in /cad2/ece344f/tester/scripts/readonlydir: testfile
+Only in ./tester: tester
