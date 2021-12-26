@@ -27,6 +27,7 @@ mallinfo_check(struct mallinfo *start)
 	struct mallinfo end = mallinfo();
 	/* mallinfo is not entirely reliable. 
 	 * we are lax with checking memory leaks */
+	//printf("end.uordblks: %d, Total: %d, start->uordblks: %d, 2 min stacks: %d\n", end.uordblks, (start->uordblks  + (2 * THREAD_MIN_STACK)), start->uordblks, (2 * THREAD_MIN_STACK));
 	assert(end.uordblks <= (start->uordblks  + (2 * THREAD_MIN_STACK)));
 	assert(end.hblks == start->hblks);
 }
@@ -147,7 +148,7 @@ test_basic()
 			assert(thread_ret_ok(ret));
 		}
 	}
-
+	//ret = thread_yield(1);
 	/* check that the thread stacks are sufficiently far apart */
 	for (ii = 0; ii < THREAD_MAX_THREADS; ii++) {
 		for (jj = 0; jj < THREAD_MAX_THREADS; jj++) {
@@ -215,6 +216,7 @@ test_basic()
 	 * running is the main thread, and so no memory should have been
 	 * allocated using malloc. this assumes that the thread structures are
 	 * allocated statically. */
+	//freeTCBStacks();
 	mallinfo_check(&minfo_start);
 	grand_finale();
 	printf("\n\nBUG: test should not get here\n\n");
@@ -263,6 +265,7 @@ hello(char *msg)
 static int
 fact(int n)
 {
+	//printf("isnide fact we are: %d, n= %d\n", thread_id(), n);
 	/* store address of some variable on stack */
 	stack_array[thread_id()] = (long *)&n;
 	if (n == 1) {

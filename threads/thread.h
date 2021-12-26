@@ -30,7 +30,12 @@ thread_ret_ok(Tid ret)
 /*************************************************
  * Lab 2: Implement the following four functions *
  *************************************************/
+//stack deallocation control
+void freeTCBStacks();
+//stack de-allocation + checks to see if the current running thread was requested to be killed
+void threadResponsibilities();
 
+void thread_stub(void (*thread_main)(void *), void *arg); 
 /* perform any initialization needed by your threading system */
 void thread_init(void);
 
