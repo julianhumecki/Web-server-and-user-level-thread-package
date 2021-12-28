@@ -516,6 +516,7 @@ out:
 
 	/* no thread should be waiting on queue */
 	wait_queue_destroy(queue);
+	//printf("here we are after queue destroy\n");
 
 	/* wait for other threads to exit */
 	while (thread_yield(THREAD_ANY) != THREAD_NONE) {

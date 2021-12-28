@@ -30,6 +30,8 @@ thread_ret_ok(Tid ret)
 /*************************************************
  * Lab 2: Implement the following four functions *
  *************************************************/
+//deallocate the allocated pseduo_heads for the wait queue
+void dealloc_thread_specific_wait_queue(); 
 //stack deallocation control
 void freeTCBStacks();
 //stack de-allocation + checks to see if the current running thread was requested to be killed

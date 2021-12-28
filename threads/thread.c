@@ -7,10 +7,50 @@
 #include "interrupt.h"
 
 /* This is the wait queue structure */
+//Structure: dummy_head: first elem is dummy_head.next 
 struct wait_queue {
-	/* ... Fill this in Lab 3 ... */
+	Tid id;
+	struct wait_queue * next;  
 };
+//Wait Queue Structure: pseduo_head: first elem is pseduo_head->next 
+struct wait_queue * getHeadWait(struct wait_queue * queue){
+	return queue->next;
+}
+//add thread to end of the wait queue
+void pushThreadToWait(struct wait_queue ** queue, Tid tid){
+	struct wait_queue * head = (*queue)->next;
+	//create structure and set the default values
+	struct wait_queue * newElem = malloc(sizeof(struct wait_queue));
+	assert(newElem);
+	newElem->id = tid;
+	newElem->next = NULL;
+	//is the linkedlist empty
+	if (!head){
+		(*queue)->next = newElem;
+		return;
+	}
+	struct wait_queue * curr = head;
+	while (curr->next){
+		curr = curr->next;
+	}
+	//we are now at the last element in the queue, add the newly created element to the mix
+	curr->next = newElem;
+}
+//rmeove the thread at the front of the wait queue
+Tid popHeadThreadWait(struct wait_queue ** queue){
+	struct wait_queue * head = (*queue)->next;
+	if (head){
+		//reassign the pseudo_head's head
+		Tid tid = head->id;
+		(*queue)->next = head->next;
+		free(head);
+		head = NULL;
+		return tid;
+	}
+	return -1;
+}
 
+//Thread structure + state definitions
 typedef enum ThreadState{
 	NOT_ASSIGNED = 0,
 	READY = 1,
@@ -18,14 +58,17 @@ typedef enum ThreadState{
 } ThreadState;  
 /* This is the thread control block */
 struct thread {
-	/* ... Fill this in ... */
+	
 	ThreadState t_state;
 	Tid id;
 	ucontext_t mycontext;  //get it using getcontext, then change the sp, base pointer, the pc
 	void * stack_to_free;  
 	volatile int setcontext_called;
 	volatile int killOnNextRun; 
-	//volatile int freeTidStackOnNextRun;  
+	// volatile int intrpt_carry;  
+	struct wait_queue * waitQueue;
+	//keeps track of the threads sleeping  on this thread, when it exits, it will wake these sleepers up
+	struct wait_queue * t_wait;
 };
 //defined the thread control block
 struct thread TCBs[THREAD_MAX_THREADS];  
@@ -92,6 +135,10 @@ void addToTail(struct ready_queue *LL, Tid id){
 	}
 	LL->head = head;
 	LL->tail = tail;	
+}
+//get the element at the front of the ready queue
+struct ready_elem * getHead(struct ready_queue *LL){
+	return LL->head;
 }
 
 Tid removeNextReadyThread(struct ready_queue *LL){
@@ -272,6 +319,8 @@ thread_init(void)
 		TCBs[i].t_state = NOT_ASSIGNED;
 		TCBs[i].setcontext_called = 0;
 		TCBs[i].killOnNextRun = 0;
+		TCBs[i].waitQueue = NULL; 
+		TCBs[i].t_wait = wait_queue_create();
 		
 	}
 	//initialize Tid = 0 for the current thread
@@ -281,12 +330,24 @@ thread_init(void)
 	TCBs[0].t_state = RUNNING;
 	TCBs[0].setcontext_called = 0; 
 	TCBs[0].killOnNextRun = 0;
-	
+	TCBs[0].waitQueue = NULL;  
+	TCBs[0].t_wait = wait_queue_create(); 
 	//initialize the current thread
 	current_thread_id = 0;
 
 }
 
+void dealloc_thread_specific_wait_queue(){
+	int i = 0;
+	for (i = THREAD_MAX_THREADS - 1; i >= 0; i--){
+		//if not de-allocate, de-alloc it
+		if (TCBs[i].t_wait){
+			free(TCBs[i].t_wait);
+			TCBs[i].t_wait = NULL;
+		}
+	}
+}
+//assumes interrupts are off upon being called, can check with: assert(!interrupts_enabled())
 void freeTCBStacks(){
 	int i = 0;
 	for (i = 1; i < THREAD_MAX_THREADS; i++){
@@ -299,26 +360,44 @@ void freeTCBStacks(){
 }
 
 void threadResponsibilities(){
+	//printf("threadResponsibilities Interrupts_enabled: %d, yielded: %d, \n", interrupts_enabled(), thread_id());
+	int enabled = interrupts_off();
+	//int stateSetTo = -1;
 	//first free the allocated, unassigned stacks, then exit 
 	freeTCBStacks(); 
+	//ok cuz: we are just reading the variable 'killOnNextRun' after + disabling occurs again in thread_exit
+	interrupts_set(enabled); 
+	
 	//exit if you were killed by another thread
 	if (TCBs[current_thread_id].killOnNextRun == 1){
 		thread_exit();
 	}
+
 }
 
 Tid
 thread_id()
 {
+	
+	//disbale interrupts
+	int enabled = interrupts_set(0);
 	if (current_thread_id >= 0){   
+		//restore the state prior to us turning off interrupts
+		interrupts_set(enabled);
 		return current_thread_id;
 	}
+	//restore the state prior to us turning off interrupts
+	interrupts_set(enabled);
 	return THREAD_INVALID;
 }
 
 void
 thread_stub(void (*thread_main)(void *), void *arg)
 {
+	//allow for interrupts, cuz by default interrupts will be off in the signal handler, and the first time we enter the stub we want to enable interrupts
+	//in yield, we just want to keep executing the the state we had prior, saved by getcontext
+	if (!interrupts_enabled()) interrupts_set(1);
+
 	threadResponsibilities(); 
 	// call thread_main() function with arg
 	thread_main(arg); 
@@ -329,6 +408,10 @@ thread_stub(void (*thread_main)(void *), void *arg)
 Tid
 thread_create(void (*fn) (void *), void *parg)
 {
+	//printf("thread_create Interrupts_enabled: %d, yielded: %d, \n", interrupts_enabled(), thread_id());
+	//disable interrupts, so there is no context switch that occurs while creating a thread
+	int enabled = interrupts_set(0); 
+	//save the context, so we can copy this over to the new thread
 	int err = getcontext(&TCBs[current_thread_id].mycontext);
 	assert(!err);
 
@@ -336,6 +419,8 @@ thread_create(void (*fn) (void *), void *parg)
 	Tid id = removeFromHead(&availableThreadIds);
 	//Check if all tids are being used 
 	if (id == -1){ 
+		//restore blocking/unblocking state
+		interrupts_set(enabled);
 		return THREAD_NOMORE;
 	}
 
@@ -352,6 +437,8 @@ thread_create(void (*fn) (void *), void *parg)
 	void * sp = TCBs[id].stack_to_free;
 	
 	if (!TCBs[id].stack_to_free){
+		//restore blocking/unblocking state
+		interrupts_set(enabled);
 		return THREAD_NOMEMORY;
 	}
 	//make the mycontext copy
@@ -378,6 +465,10 @@ thread_create(void (*fn) (void *), void *parg)
 	//	push this ready Thread with tid to readyQueue
 	addToTail(&readyQueue, id); 
 	//printf("Created thread with tid=%d\n", id);
+
+	//restore blocking/unblocking state
+	interrupts_set(enabled);
+	//printf("thread_create done Interrupts_enabled: %d, yielded: %d, \n", interrupts_enabled(), thread_id());
 	return id; 
 
 }
@@ -385,23 +476,38 @@ thread_create(void (*fn) (void *), void *parg)
 Tid
 thread_yield(Tid want_tid)
 {
+	
+	
+	//INTERRUPTS ARE ALREADY DISABLED UPON ENTRY
+	
+	int enabled = interrupts_set(0);
+	//printf("thread_yield: old_state = %d, inter_on: %d, calling tid: %d, target tid: %d\n", enabled, interrupts_enabled(), thread_id(), want_tid);
+
 	Tid took_control = want_tid;
 	int oldThreadId;
 	//check against an invalid tid to yield to
 	if (want_tid >= THREAD_MAX_THREADS || want_tid < -7){
+		//interrupts_set(enabled);
+		interrupts_set(enabled);
 		return THREAD_INVALID;
 	}
 	//check if we are trying to yield ourselves, not possible
 	else if (THREAD_SELF == want_tid){
+		// interrupts_set(enabled);
+		interrupts_set(enabled);
 		return current_thread_id;
 	}
 	//check if we are trying to yield ourselves by specifying our current tid
 	else if (want_tid == current_thread_id){
+		// interrupts_set(enabled);
+		interrupts_set(enabled);
 		return current_thread_id;
 	}
 	//want_tid doesn't have an active thread
 	else if (want_tid >= 0 && TCBs[want_tid].t_state == NOT_ASSIGNED){
 		//printf("Unassigned want_tid: %d\n", want_tid);
+		// interrupts_set(enabled);
+		interrupts_set(enabled);
 		return THREAD_INVALID;
 	}
 	else if (want_tid == THREAD_ANY){
@@ -411,6 +517,8 @@ thread_yield(Tid want_tid)
 		//printf("curr tid = %d, next tid: %d, setcontext_called: %d\n", thread_id(), nextTidToRun, TCBs[current_thread_id].setcontext_called);
 		//None are available, keep 'current_thread_id' as is
 		if (nextTidToRun == -1){
+			// interrupts_set(enabled);
+			interrupts_set(enabled);
 			return THREAD_NONE;
 		}
 		//printf("Tid = %d, setcontextcalled = %d\n", thread_id(), TCBs[current_thread_id].setcontext_called);
@@ -427,22 +535,38 @@ thread_yield(Tid want_tid)
 		if (TCBs[current_thread_id].setcontext_called == 0){
 			//change old thread to the ready state  
 			TCBs[current_thread_id].t_state = READY; 
-			//put current_threaf to the back of the READY_QUEUE
-			addToTail(&readyQueue, current_thread_id); 
+			if (TCBs[current_thread_id].waitQueue){
+				//put current_thread to the back of the WAIT_QUEUE
+				pushThreadToWait(&(TCBs[current_thread_id].waitQueue), current_thread_id); 
+				//clear for the next call to yield to avoid unwanted pushes to the waitQueue 
+				TCBs[current_thread_id].waitQueue = NULL;
+			}
+			else{
+				//put current_thread to the back of the READY_QUEUE
+				addToTail(&readyQueue, current_thread_id); 
+			}	
 			//update these for the next thread
 			current_thread_id = nextTidToRun;
 			//set the state of the next thread
 			TCBs[nextTidToRun].t_state = RUNNING;  
 			//update the yielding thread's setcontext_called to 1 (so that we don't have to re-enter this yielding chunk of code, cuz we already yielded once)
 			TCBs[oldThreadId].setcontext_called = 1; 
+			//context switch to the new thread
+			// interrupts_set(enabled);
+			//TCBs[nextTidToRun].intrpt_carry = enabled;
+			//interrupts_set(enabled);
+			//printf("in yield b4 switch inter_enabled: %d\n", interrupts_on());
 			int err = setcontext(&TCBs[nextTidToRun].mycontext);
 			//should never reach this point, setcontext doesnt return on success    
 			assert(!err);
 			assert(0);
 		}
-		//printf("Resetting oldId = %d, cur_thread = %d\n", oldThreadId, thread_id());
+
+		//int ena = interrupts_off();
+		//printf("Resetting setcontext_call, tid = %d, ena = %d, inter_on = %d\n", thread_id(), ena, interrupts_enabled());
 		//turn off setcontext_called upon calling thread being scheduled again, since we already executed the yielding block above, allows the calling thread to yield again in the future
 		TCBs[current_thread_id].setcontext_called = 0; 
+		//interrupts_set(ena); 
 		
 	}
 	else{
@@ -453,6 +577,8 @@ thread_yield(Tid want_tid)
 		
 		//None are available, keep 'current_thread_id' as is
 		if (nextTidToRun == -1){
+			// interrupts_set(enabled);
+			interrupts_set(enabled);
 			return THREAD_NONE;
 		}
 		
@@ -469,38 +595,61 @@ thread_yield(Tid want_tid)
 		//change the state of the calling thread appropriately such that it can yield to the nextThread we got from the ready queue
 		if (TCBs[current_thread_id].setcontext_called == 0){
 			//change old thread to the ready state  
-			TCBs[current_thread_id].t_state = READY;   
-			//put current_threaf to the back of the READY_QUEUE
-			addToTail(&readyQueue, current_thread_id); 
+			TCBs[current_thread_id].t_state = READY;    
+			if (TCBs[current_thread_id].waitQueue){
+				//put current_thread to the back of the WAIT_QUEUE
+				pushThreadToWait(&(TCBs[current_thread_id].waitQueue), current_thread_id);  
+				//clear for the next call to yield to avoid unwanted pushes to the waitQueue
+				TCBs[current_thread_id].waitQueue = NULL;
+			}
+			else{
+				//put current_thread to the back of the READY_QUEUE
+				addToTail(&readyQueue, current_thread_id);  
+			} 
 			//update these for the next thread
 			current_thread_id = nextTidToRun;
 			//set the state of the next thread
 			TCBs[nextTidToRun].t_state = RUNNING;  
 			//update the yielding thread's setcontext_called to 1 (so that we don't have to re-enter this yielding chunk of code, cuz we already yielded once)
 			TCBs[oldThreadId].setcontext_called = 1; 
+			//context switch to the new thread
+			//interrupts_set(enabled);
+			//TCBs[nextTidToRun].intrpt_carry = enabled;
+			//interrupts_set(enabled);
 			int err = setcontext(&TCBs[nextTidToRun].mycontext);
 			//should never reach this point, setcontext doesnt return on success    
 			assert(!err);
 			assert(0);
 		}
 		
+		//int ena = interrupts_off();
 		//turn off setcontext_called upon calling thread being scheduled again, since we already executed the yielding block above, allows the calling thread to yield again in the future
 		TCBs[current_thread_id].setcontext_called = 0; 
+		//interrupts_set(ena); 
 	}
-	
+	//printf("end of thread_yield: old_state = %d, inter_on: %d, calling tid: %d, target tid: %d\n", enabled, !interrupts_enabled(), thread_id(), want_tid);
+	interrupts_set(enabled);  
 	return took_control;
 }
 
 void
 thread_exit()
 {
-	//printf("Thread is exiting: %d\n", thread_id());
+	//printf("thread_exit Interrupts_enabled: %d, yielded: %d, \n", interrupts_enabled(), thread_id());
+
+	//disable interrupts, so there is no context switch that occurs while creating a thread
+	int enabled = interrupts_set(0); 
 
 	//reset the context of this thread, change state to not assigned, remove from readyQueue
 	memset(&(TCBs[current_thread_id].mycontext), 0, sizeof(ucontext_t));
 	//WILL DEAL WITH FREEING STACK DURING RESTORE FROM YIELD, A THREAD'S FIRST RUN, & THE MAIN THREAD's EXIT
 	TCBs[current_thread_id].t_state = NOT_ASSIGNED;
 	TCBs[current_thread_id].killOnNextRun = 0;
+	TCBs[current_thread_id].waitQueue = NULL;
+	//manage the wait queue for the threads sleeping on us to exit
+	thread_wakeup(TCBs[current_thread_id].t_wait, 1);
+	//destroy the pseduo head upon the main thread exiting
+
 	
 	//make curr_tid (current_thread_id) available for future threads to use
 	addToHeadId(&availableThreadIds, current_thread_id);
@@ -511,35 +660,47 @@ thread_exit()
 	//no thread is ready to run, this means we finish our execution
 	if (nextTidToRun == -1){
 		freeTCBStacks();
+		//deallocate the allocated pseduo_heads for the wait queue
+		dealloc_thread_specific_wait_queue();
+		//restore blocking/unblocking state
+		interrupts_set(enabled);
 		exit(0);
 	}
 	
 	//mark this nextTid as the new thread that is running
 	current_thread_id = nextTidToRun;
 	TCBs[nextTidToRun].t_state = RUNNING;
-	
+	//set the context for the nextTid
 	int err = setcontext(&TCBs[nextTidToRun].mycontext); 
 	//should never reach this point 
 	assert(!err);
 	assert(0);
 }
 
+//Note: the current implementation will work if target tid to_kill is waiting/asleep cuz we flag it, telling it to exit when it runs next
 Tid
 thread_kill(Tid tid)
 {
+	//disable interrupts, so there is no context switch that occurs while creating a thread
+	int enabled = interrupts_set(0); //disable interrupts so no issues when modifying global variables
+
 	//check if thread_kill is trying to commit suicide; if so: THREAD_INVALID to kill
 	//printf("Not past the first if: isAssigned: %d\n", TCBs[tid].t_state);
 	if (tid >= 1024 || tid < -7){
+		interrupts_set(enabled);
 		return THREAD_INVALID;
 	}
 	//check if the target thread: tid isnt being used; if so: THREAD_INVALID to kill
 	if ((tid == current_thread_id) || (TCBs[tid].t_state == NOT_ASSIGNED)){
+		interrupts_set(enabled);
 		return THREAD_INVALID;
 	}
 
 	//mark the targeted tid such that it should exits the next time it runs
 	TCBs[tid].killOnNextRun = 1;
 	
+	interrupts_set(enabled);
+
 	//keep 'current_thread_id' as is
 	return tid;
 }
@@ -549,31 +710,58 @@ thread_kill(Tid tid)
  *******************************************************************/
 
 /* make sure to fill the wait_queue structure defined above */
+//return the head of the wait queue
 struct wait_queue *
 wait_queue_create()
 {
+	//no need to turn off interrupts as all this is local and no global vars are access
 	struct wait_queue *wq;
 
 	wq = malloc(sizeof(struct wait_queue));
 	assert(wq);
 
-	TBD();
-
+	//signifies the dummy_head
+	wq->id = -1; 
+	wq->next = NULL;
 	return wq;
 }
 
 void
 wait_queue_destroy(struct wait_queue *wq)
 {
-	TBD();
+	//free all the allocated memory by the wait queue
+	int tid = popHeadThreadWait(&wq);
+	while (tid != -1){
+		tid = popHeadThreadWait(&wq);
+	}
+	//finally free the pseudo_head
 	free(wq);
+	wq = NULL;
 }
 
 Tid
 thread_sleep(struct wait_queue *queue)
 {
-	TBD();
-	return THREAD_FAILED;
+	//disable the interrupts, since we will be accessing global variables in the fcn
+	int enabled = interrupts_set(0);
+	if (!queue){
+		interrupts_set(enabled);
+		return THREAD_INVALID;
+	}
+	//obtain next ready thread to run, simply read, dont remove it (thread_yield will remove this tid from the readyQueue)
+	struct ready_elem * nextReadyThread = getHead(&readyQueue);
+	//if none available, show this (thread is null)
+	if (!nextReadyThread){ 
+		interrupts_set(enabled);
+		return THREAD_NONE;
+	}
+	//tell yield to push the yielding thread to the wait queue instead of the ready queue
+	TCBs[current_thread_id].waitQueue = queue;
+	//yields to this nextReadyThread
+	Tid suspendedTid = thread_yield(nextReadyThread->id); //however we want the current thread to be added to the wait queue, not the ready queue (as done in thread_yield)
+	interrupts_set(enabled);
+	return suspendedTid;
+
 }
 
 /* when the 'all' parameter is 1, wakeup all threads waiting in the queue.
@@ -581,20 +769,66 @@ thread_sleep(struct wait_queue *queue)
 int
 thread_wakeup(struct wait_queue *queue, int all)
 {
-	TBD();
-	return 0;
+	int enabled = interrupts_set(0);
+	int woke_up = 0;
+	//check if an invalid queue was passed
+	if (!queue){
+		interrupts_set(enabled);
+		return 0;
+	}
+	//check if wait queue is empty
+	if (!getHeadWait(queue)){
+		interrupts_set(enabled);
+		return 0;
+	}
+	//guaranteed for there to be at least one elem in the wait_queue at this point
+
+	//pop the tid from the wait queue and add it to the ready queue
+	Tid tid_popped = popHeadThreadWait(&queue);
+	addToTail(&readyQueue, tid_popped);
+	woke_up += 1;
+	//check if we must wake up all waiting threads
+	if (all == 1){
+		
+		//pop until the wait queue is empty
+		while (tid_popped != -1){ 
+			tid_popped = popHeadThreadWait(&queue);
+			if (tid_popped != -1){
+				
+				addToTail(&readyQueue, tid_popped);
+				woke_up += 1;
+			}
+		}
+	}
+	interrupts_set(enabled);
+	return woke_up;
+
 }
 
 /* suspend current thread until Thread tid exits */
 Tid
 thread_wait(Tid tid)
 {
-	TBD();
-	return 0;
+	int enabled = interrupts_set(0);
+	if (tid < 0 || tid == current_thread_id){
+		interrupts_set(enabled);
+		return THREAD_INVALID;
+	}
+	if (tid >= 0 && TCBs[tid].t_state == NOT_ASSIGNED){
+		interrupts_set(enabled);
+		return THREAD_INVALID;
+	}
+	//sleep on the wait_queue of tid; when tid exits, wakeupall threads sleeping on this wait queue
+	thread_sleep(TCBs[tid].t_wait);
+	interrupts_set(enabled);
+	return tid;
 }
 
 struct lock {
 	/* ... Fill this in ... */
+	struct wait_queue * wait_on_lock;
+	bool isAcquired;
+	Tid acquiredBy;
 };
 
 struct lock *
@@ -604,8 +838,9 @@ lock_create()
 
 	lock = malloc(sizeof(struct lock));
 	assert(lock);
-
-	TBD();
+	lock->isAcquired = false;
+	lock->acquiredBy = -1;
+	lock->wait_on_lock = wait_queue_create();
 
 	return lock;
 }
@@ -614,30 +849,52 @@ void
 lock_destroy(struct lock *lock)
 {
 	assert(lock != NULL);
-
-	TBD();
-
+	assert(!lock->isAcquired);
+	wait_queue_destroy(lock->wait_on_lock);
 	free(lock);
+	lock = NULL;
 }
 
 void
 lock_acquire(struct lock *lock)
 {
+	int enabled = interrupts_set(0);
 	assert(lock != NULL);
+	//sleep until the holding thread leaves and wakes you up, THen try to aquire lock, if success leave, if you fail, go back to sleep
+	while (1){
+		if (!lock->isAcquired){
+			lock->isAcquired = true;
+			lock->acquiredBy = current_thread_id;
+			break;
+		}
+		else{
+			thread_sleep(lock->wait_on_lock);
+		}	
+	}
 
-	TBD();
+	interrupts_set(enabled);
 }
 
 void
 lock_release(struct lock *lock)
 {
+	int enabled = interrupts_set(0);
 	assert(lock != NULL);
-
-	TBD();
+	//make sure the calling thread is releasing the lock
+	if (lock->isAcquired){
+		if (lock->acquiredBy == current_thread_id){
+			//wake up all threads waiting on this lock
+			thread_wakeup(lock->wait_on_lock, 1);
+			lock->acquiredBy = -1; 
+			lock->isAcquired = false;
+		}
+	}
+	interrupts_set(enabled);
 }
 
 struct cv {
 	/* ... Fill this in ... */
+	struct wait_queue * wait_on_cv;
 };
 
 struct cv *
@@ -647,8 +904,8 @@ cv_create()
 
 	cv = malloc(sizeof(struct cv));
 	assert(cv);
-
-	TBD();
+	//instantiate a psuedo_head for this queue
+	cv->wait_on_cv = wait_queue_create();
 
 	return cv;
 }
@@ -657,8 +914,8 @@ void
 cv_destroy(struct cv *cv)
 {
 	assert(cv != NULL);
-
-	TBD();
+	//destroy the cv's wait_queue
+	wait_queue_destroy(cv->wait_on_cv);
 
 	free(cv);
 }
@@ -666,26 +923,50 @@ cv_destroy(struct cv *cv)
 void
 cv_wait(struct cv *cv, struct lock *lock)
 {
+	//disable interrupts (no context switches til we restore the previous state; assuming ht eprevious state is 1)
+	int enabled = interrupts_set(0);
 	assert(cv != NULL);
 	assert(lock != NULL);
 
-	TBD();
+	
+	//lock acquire allows us to enforce that only one thread will successfully acquire the lock and return, others will sleep on the lock
+	if (lock->isAcquired && lock->acquiredBy == current_thread_id){
+		lock_release(lock);
+		//wait for cv to get signaled, sleep on the cv as opposed to the lock (the lock is our mutually exclusive region, the cv allows us to control the order of access to our mutex region)
+		thread_sleep(cv->wait_on_cv);
+		//reacaqurie the lock
+		lock_acquire(lock); 
+		//break;
+	}
+	
+	interrupts_set(enabled);
 }
 
 void
 cv_signal(struct cv *cv, struct lock *lock)
 {
+	int enabled = interrupts_set(0);
 	assert(cv != NULL);
 	assert(lock != NULL);
-
-	TBD();
+	//check to make sure calling thread has acquired the lock before signalling the cv to wake up one sleeping thread 
+	if (lock->isAcquired && lock->acquiredBy == current_thread_id){
+		//wake up one thread that is waiting on the cv
+		thread_wakeup(cv->wait_on_cv, 0);
+	}
+	interrupts_set(enabled);
 }
 
 void
 cv_broadcast(struct cv *cv, struct lock *lock)
 {
+	int enabled = interrupts_set(0);
 	assert(cv != NULL);
 	assert(lock != NULL);
-
-	TBD();
+	//check to make sure calling thread has acquired the lock before signalling the cv to wake up one sleeping thread 
+	if (lock->isAcquired && lock->acquiredBy == current_thread_id){
+		//wake up all threads that are waiting on the cv, only one will acquire the lock; the rest will end up sleeping on the lock in cv_wait
+		thread_wakeup(cv->wait_on_cv, 1);
+	}
+	interrupts_set(enabled); 
+	
 }

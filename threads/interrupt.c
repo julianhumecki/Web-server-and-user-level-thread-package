@@ -171,7 +171,9 @@ interrupt_handler(int sig, siginfo_t * sip, void *contextVP)
 	}
 	set_interrupt();
 	/* implement preemptive threading by calling thread_yield */
+	//printf("handler pre yield interrupts_enabled: %d, calling tid: %d\n", interrupts_enabled(), thread_id());
 	thread_yield(THREAD_ANY);
+	//printf("handler post yield interrupts_enabled: %d, calling tid: %d\n", interrupts_enabled(), thread_id());
 }
 
 /*
