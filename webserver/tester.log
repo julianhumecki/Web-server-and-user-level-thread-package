@@ -1,11 +1,11 @@
-Wed 29 Dec 2021 06:23:02 PM EST
+Wed 29 Dec 2021 07:41:51 PM EST
 Running threads experiment. Output goes to plot-threads.out
-./run-one-experiment: line 70: 20112 Segmentation fault      ./server $PORT $NR_THREADS $MAX_REQUESTS $CACHE_SIZE > server.log
-./run-one-experiment: line 70: 20196 Segmentation fault      ./server $PORT $NR_THREADS $MAX_REQUESTS $CACHE_SIZE > server.log
-./run-one-experiment: line 70: 20281 Segmentation fault      ./server $PORT $NR_THREADS $MAX_REQUESTS $CACHE_SIZE > server.log
+./run-one-experiment: line 70: 32252 Segmentation fault      ./server $PORT $NR_THREADS $MAX_REQUESTS $CACHE_SIZE > server.log
+./run-one-experiment: line 70: 32337 Segmentation fault      ./server $PORT $NR_THREADS $MAX_REQUESTS $CACHE_SIZE > server.log
+./run-one-experiment: line 70: 32419 Segmentation fault      ./server $PORT $NR_THREADS $MAX_REQUESTS $CACHE_SIZE > server.log
 Threads experiment done.
-Wed 29 Dec 2021 06:27:07 PM EST
+Wed 29 Dec 2021 07:45:57 PM EST
 Running requests experiment. Output goes to plot-requests.out
-./run-one-experiment: line 70: 21375 Segmentation fault      ./server $PORT $NR_THREADS $MAX_REQUESTS $CACHE_SIZE > server.log
-./run-one-experiment: line 70: 21461 Segmentation fault      ./server $PORT $NR_THREADS $MAX_REQUESTS $CACHE_SIZE > server.log
+./run-one-experiment: line 70:  1158 Segmentation fault      ./server $PORT $NR_THREADS $MAX_REQUESTS $CACHE_SIZE > server.log
+./run-one-experiment: line 70:  1268 Segmentation fault      ./server $PORT $NR_THREADS $MAX_REQUESTS $CACHE_SIZE > server.log
 Requests experiment done.

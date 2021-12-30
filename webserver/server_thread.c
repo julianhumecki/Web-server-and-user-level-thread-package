@@ -148,11 +148,14 @@ do_server_t_request(void * ptr){
 		pthread_mutex_lock(&mp);
 		struct queue_struct front = popConnection(&connection_requests);
 		//printf("Initial task being requested: connfd = %d, id = %ld, curr_len=%d\n", front.connfd, pthread_self(), connection_requests.length);
-		//should get signaled when we add a task to the queue
-		while (front.connfd == -1){ //another thread could beat us to the resource, meaning we don't get a task (should be taken care of pthread_cond_wait: should not allow more than one thread to leave upon signal call (not broadcast))
+		//get signaled when we add a task to the queue
+		//another thread could beat us to the resource, meaning we don't get a task
+		//this is possible since a thread could be waiting on acquiring the lock on line 149, and it could get the be in front of the cond_waiting thread in the lock_wait queue
+		//thus, this must be a while loop
+		while (front.connfd == -1){ 
 			pthread_cond_wait(&cv_work, &mp);
 			//printf("THread woke up, id = %ld, curr_len = %d\n", pthread_self(), connection_requests.length);
-			//try again
+			//try again to get a socket identifier to send the data back to a client
 			front = popConnection(&connection_requests);
 			//don't wait again, just leave
 			if (isServerExiting){
@@ -161,7 +164,7 @@ do_server_t_request(void * ptr){
 		}
 		//printf("After task has been retrieved: front connfd = %d, isServerExiting = %d, curr_len = %d\n", front.connfd, isServerExiting, connection_requests.length); //should  never be -1
 		/*if (front.connfd == -1){
-			printf("Wtf\n");
+			printf("Should never be reached\n");
 		}*/
 		//signal main that we have removed a task, so the desired task can be added to the queue
 		pthread_cond_signal(&cv_main);
@@ -200,10 +203,6 @@ server_init(int nr_threads, int max_requests, int max_cache_size)
 	assert(!pthread_cond_init(&cv_work, NULL));
 	assert(!pthread_cond_init(&cv_main, NULL));
 	
-	// if (nr_threads > 0 || max_requests > 0 || max_cache_size > 0) {
-	// 	//TBD();
-	// }
-
 	/* Lab 4: create queue of max_request size when max_requests > 0 */
 	if (max_requests > 0){
 		connection_requests.head = NULL; 
@@ -283,5 +282,6 @@ server_exit(struct server *sv)
 	}
 	/* make sure to free any allocated resources */
 	free(sv);
+	//printf("Server successfully exited\n"); 
 	
 }
