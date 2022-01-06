@@ -143,7 +143,7 @@ struct sched_queue * add_to_queue_cpy(struct scdle * sch_queue, struct sched_que
 struct sched_queue *isInFlight (struct scdle * sch_queue, char * filename){
 	struct sched_queue * head = sch_queue->head;
 	while (head){
-		printf("isInFlight filename: %s\n", filename);
+		//printf("isInFlight filename: %s\n", filename);
 		if (strcmp(head->filename, filename) == 0){
 			return head;
 		}
@@ -160,7 +160,7 @@ struct sched_queue *remove_from_queue (struct scdle * sch_queue, char * filename
 		//printf("List is empty, fail no removal\n");
 		return NULL;
 	}
-	printf("remove_from_queue filename: %s\n", filename);
+	//printf("remove_from_queue filename: %s\n", filename);
 	if (strcmp(head->filename, filename) == 0){
 		sch_queue->head = head->next;
 		if (!sch_queue->head){
@@ -172,7 +172,7 @@ struct sched_queue *remove_from_queue (struct scdle * sch_queue, char * filename
 	struct sched_queue * prev;
 	prev = head;
 	head = head->next;
-	printf("remove_from_queue2 filename: %s\n", filename);	
+	//printf("remove_from_queue2 filename: %s\n", filename);	
 	while (head){
 		if (strcmp(head->filename, filename) == 0){
 			prev->next = head->next;
@@ -232,7 +232,7 @@ bool pushBack(struct cache_lru *LL, struct file_data * data){
 //return a cached file from the lru, slower than from cache, but it is less code!
 struct file_data *getCachedFile(struct cache_lru *LL, struct file_data *data){
 	struct ready_elem * head = LL->head;
-	printf("getCachedFile filename: %s\n", data->file_name);
+	//printf("getCachedFile filename: %s\n", data->file_name);
 	while (head){
 		if (strcmp(head->info->file_name, data->file_name) == 0){
 			return head->info;
@@ -275,7 +275,7 @@ struct file_data * removeFileToBeMovedToBack(struct cache_lru *LL, struct file_d
 	struct ready_elem * head = LL->head;
 	struct ready_elem * tail = LL->tail;
 	if (head){
-		printf("removeFileToBeMovedToBack filename: %s\n", data->file_name); 
+		// printf("removeFileToBeMovedToBack filename: %s\n", data->file_name); 
 		if (strcmp(head->info->file_name, data->file_name) == 0 ){
 		    if (head->prev == NULL && head->next == NULL){
 				struct file_data * ret_val = head->info;
@@ -522,14 +522,14 @@ bool remove_from_cache(struct cache **wc, struct file_data * data){
 	if (!curr){
 		return false;
 	}
-	printf("remove_from_cache1 data->filename: %s\n", data->file_name);
+	//printf("remove_from_cache1 data->filename: %s\n", data->file_name);
 	if (strcmp(curr->data->file_name, data->file_name) == 0 /*&& curr->data->file_size == data->file_size*/){  
 		//adjust the head of the linkedlist, if the first element is a match
 		(*wc)->mapping[hash] = curr->next; 
 		//size to be added
 		(*wc)->curr_size -= curr->data->file_size;
 		//de-allocate the file entry
-		printf("Removing from cache: fileName = %s\n", curr->data->file_name);
+		//printf("Removing from cache: fileName = %s\n", curr->data->file_name);
 		free(curr->data->file_name);
 		free(curr->data->file_buf);
 		free(curr->data);
@@ -543,12 +543,12 @@ bool remove_from_cache(struct cache **wc, struct file_data * data){
 	curr = curr->next;
 
 	while (curr){
-		printf("remove_from_cache2 data->filename: %s\n", data->file_name);
+		//printf("remove_from_cache2 data->filename: %s\n", data->file_name);
 		if (strcmp(curr->data->file_name, data->file_name) == 0 /*&& curr->data->file_size == data->file_size*/){
 			prev->next = curr->next;
 			//add the size back
 			(*wc)->curr_size -= curr->data->file_size;
-			printf("Removing from cache: fileName = %s\n", curr->data->file_name);
+			//printf("Removing from cache: fileName = %s\n", curr->data->file_name);
 			//de-allocate the file entry
 			free(curr->data->file_name);
 			free(curr->data->file_buf);
@@ -649,7 +649,7 @@ void destroy_cache_wrapper(){
 bool cache_lookup(struct file_data * data){
 	struct file_data * info = removeFileToBeMovedToBack(&LRU_Policy, data);
 	//not found in LRU, thus not in cache
-	if (!info) {printf("Lookup unsuccessful\n");return false;}
+	if (!info) {/*printf("Lookup unsuccessful\n");*/return false;}
 	//move data to the back so that it reflects that the file was looked up recently
 	return pushBack(&LRU_Policy, info);
 }
@@ -730,14 +730,14 @@ do_server_request(struct server *sv, int connfd)
 	}
 	//case 2) handles the mutex reading of a file, such that multiple copies of the same file dont get saved in the cache
 	pthread_mutex_lock(&cache_access);
-	printf("Looking up connfd = %d, filename=%s\n", connfd, data->file_name);
+	//printf("Looking up connfd = %d, filename=%s\n", connfd, data->file_name);
 	if (cache_lookup(data)){
 		struct file_data * file = getCachedFile(&LRU_Policy, data);
 		// rq->data = file; 
-		printf("File is cached: connfd=%d, filename=%s, cached file == NULL: %d\n", connfd, data->file_name, file==NULL);   
-		if (file){
+		//printf("File is cached: connfd=%d, filename=%s, cached file == NULL: %d\n", connfd, data->file_name, file==NULL);   
+		/*if (file){
 			printf("FIle cache name = %s\n", file->file_name);
-		}
+		}*/
 		request_set_data(rq, file);
 		free(data);
 		data = NULL;
@@ -756,7 +756,7 @@ do_server_request(struct server *sv, int connfd)
 		//if the file is already in the cache, then this thread lost the race
 		if (cache_lookup(data)){
 			file = getCachedFile(&LRU_Policy, data);
-			printf("Is file cached after race = %d\n", file==NULL);
+			//printf("Is file cached after race = %d\n", file==NULL);
 			//update the pointer to the cached file for the request to send to the client
 			// rq->data = file;
 			request_set_data(rq, file);
@@ -767,19 +767,20 @@ do_server_request(struct server *sv, int connfd)
 		}
 		//this thread won the race, so add its file to the cache
 		else{
-			printf("Inserting to the cache, connfd=%d, filename=%s\n", connfd, data->file_name);
-			bool ret = cache_insert(data);
-			printf("Inserted to the cache, success = %d\n", ret);
+			//printf("Inserting to the cache, connfd=%d, filename=%s\n", connfd, data->file_name);
+			//bool ret = cache_insert(data);
+			cache_insert(data); 
+			//printf("Inserted to the cache, success = %d\n", ret);
 			//don't free this data, just send the request
 		}
 		pthread_mutex_unlock(&cache_access);
 	}
 	//case 1) handle the eviction of a file currently being sent to a client
 	pthread_mutex_lock(&inflight_access);
-	printf("connfd = %d, filename=%s\n", connfd, data->file_name); 
+	//printf("connfd = %d, filename=%s\n", connfd, data->file_name); 
 	//check if this file is already in flight, if yes, add a copy of its lock and cv to the queue
 	struct sched_queue * foundFile = add_to_queue(&inflight_q, data->file_name);
-	printf("after addtoqueue isfoundFile null = %d, connfd = %d, filename = %s, foundFile's filename = %s\n", foundFile == NULL, connfd, data->file_name, foundFile->filename);
+	//printf("after addtoqueue isfoundFile null = %d, connfd = %d, filename = %s, foundFile's filename = %s\n", foundFile == NULL, connfd, data->file_name, foundFile->filename);
 	pthread_mutex_unlock(&inflight_access);
 
 	// send file to client 
@@ -787,9 +788,9 @@ do_server_request(struct server *sv, int connfd)
 
 	pthread_mutex_lock(&inflight_access);
 	//does not dealloc the structure, but removes it from the queue
-	printf("before removal isfoundFile null = %d, connfd = %d, filename = %s\n", foundFile == NULL, connfd, data->file_name);
+	//printf("before removal isfoundFile null = %d, connfd = %d, filename = %s\n", foundFile == NULL, connfd, data->file_name);
 	foundFile = remove_from_queue(&inflight_q, data->file_name);
-	printf("after removal isfoundFile null = %d, connfd = %d, filename = %s\n", foundFile == NULL, connfd, data->file_name);
+	//printf("after removal isfoundFile null = %d, connfd = %d, filename = %s\n", foundFile == NULL, connfd, data->file_name);
 
 	pthread_mutex_unlock(&inflight_access);
 	//signal the sleeping thread in the eviction queue to wake up 

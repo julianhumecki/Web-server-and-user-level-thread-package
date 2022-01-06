@@ -1,6 +1,11 @@
 {
     "files.associations": {
         "cerrno": "c",
-        "thread": "c"
+        "thread": "c",
+        "array": "c",
+        "string_view": "c",
+        "initializer_list": "c",
+        "utility": "c",
+        "chrono": "c"
     }
 }
